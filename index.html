@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Calendrier WFM — Suivi des plannings</title>
+<style>
+  :root{
+    --navy:#191758; --neon:#5A52FF; --neon-soft:#EEEDFE;
+    --red:#E24B4A; --red-soft:#FCEBEB;
+    --ink:#1c1c28; --muted:#6b6b7a; --line:#e7e7ee; --line-strong:#d3d3de;
+    --bg:#ffffff; --gutter:#fafafc;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    color:var(--ink); background:var(--bg);
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+  header{
+    padding:14px 16px 10px; border-bottom:1px solid var(--line);
+    display:flex; flex-direction:column; gap:10px; flex:0 0 auto;
+  }
+  .titlebar{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .brand{display:flex; align-items:center; gap:10px; min-width:0;}
+  .dot{width:11px; height:11px; border-radius:3px; background:var(--neon); flex:0 0 auto;}
+  .brand h1{font-size:15px; font-weight:600; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .brand span{font-size:12px; color:var(--muted);}
+  .addbtn{
+    background:var(--navy); color:#fff; border:none; border-radius:9px;
+    padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer;
+    display:flex; align-items:center; gap:6px; flex:0 0 auto;
+  }
+  .addbtn:active{transform:scale(.97);}
+  .navbar{display:flex; align-items:center; gap:8px;}
+  .nav-arrow{
+    width:34px; height:34px; border:1px solid var(--line-strong); background:#fff;
+    border-radius:8px; cursor:pointer; font-size:17px; line-height:1; color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .nav-arrow:active{background:var(--gutter);}
+  .weeklabel{font-size:14px; font-weight:600; flex:1; text-align:center; user-select:none;}
+  .today-btn{
+    border:1px solid var(--line-strong); background:#fff; border-radius:8px;
+    padding:7px 12px; font-size:12px; font-weight:600; cursor:pointer; color:var(--navy);
+  }
+  .today-btn:active{background:var(--gutter);}
+
+  .conflict-banner{
+    margin:0 16px; background:var(--red-soft); border:1px solid #f3c9c9;
+    color:#9a2b2b; border-radius:9px; padding:8px 12px; font-size:12.5px;
+    display:none; align-items:flex-start; gap:8px; flex:0 0 auto;
+  }
+  .conflict-banner.show{display:flex;}
+  .conflict-banner b{font-weight:600;}
+
+  .legend{display:flex; gap:14px; align-items:center; font-size:11.5px; color:var(--muted); padding:2px 16px 0;}
+  .legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px;}
+
+  .calwrap{flex:1 1 auto; overflow:hidden; position:relative;}
+  .slider{display:flex; height:100%; transition:transform .28s cubic-bezier(.22,.61,.36,1);}
+  .weekpane{min-width:100%; height:100%; display:flex; flex-direction:column;}
+
+  .dayhead{display:grid; grid-template-columns:46px repeat(var(--cols),1fr); border-bottom:1px solid var(--line); flex:0 0 auto;}
+  .dayhead .corner{border-right:1px solid var(--line);}
+  .dcol-head{
+    text-align:center; padding:7px 2px; border-right:1px solid var(--line);
+    font-size:11px; color:var(--muted); line-height:1.35;
+  }
+  .dcol-head .dnum{display:block; font-size:16px; font-weight:600; color:var(--ink);}
+  .dcol-head.is-today .dnum{
+    background:var(--neon); color:#fff; width:26px; height:26px; line-height:26px;
+    border-radius:50%; margin:2px auto 0;
+  }
+
+  .gridscroll{flex:1 1 auto; overflow-y:auto; overflow-x:hidden;}
+  .grid{display:grid; grid-template-columns:46px repeat(var(--cols),1fr); position:relative;}
+  .timegutter{grid-column:1; border-right:1px solid var(--line); background:var(--gutter);}
+  .hourlabel{height:52px; position:relative; font-size:10.5px; color:var(--muted); text-align:right; padding-right:6px;}
+  .hourlabel span{position:absolute; top:-7px; right:6px;}
+  .daycol{position:relative; border-right:1px solid var(--line);}
+  .hourcell{height:52px; border-bottom:1px solid var(--line);}
+  .daycol.is-today{background:#faf9ff;}
+
+  .event{
+    position:absolute; border-radius:7px; padding:4px 6px; overflow:hidden;
+    color:#fff; font-size:11px; line-height:1.25; cursor:pointer;
+    border:1.5px solid transparent; box-shadow:0 1px 2px rgba(25,23,88,.12);
+  }
+  .event .etime{font-size:10px; opacity:.85; font-weight:500;}
+  .event .ename{font-weight:600; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .event.interne{background:var(--navy);}
+  .event.bpo{background:var(--neon);}
+  .event.conflict{border-color:#fff; outline:2px solid var(--red); outline-offset:-1px;}
+  .event .warn{position:absolute; top:2px; right:3px; font-size:10px;}
+
+  .empty-hint{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;}
+  .empty-hint span{color:var(--muted); font-size:12px; background:rgba(255,255,255,.7); padding:4px 10px; border-radius:20px;}
+
+  /* modal */
+  .overlay{position:fixed; inset:0; background:rgba(20,20,40,.4); display:none; align-items:flex-end; justify-content:center; z-index:50;}
+  .overlay.show{display:flex;}
+  .sheet{
+    background:#fff; width:100%; max-width:440px; border-radius:16px 16px 0 0;
+    padding:18px 18px 22px; animation:rise .22s ease;
+  }
+  @media(min-width:520px){ .overlay{align-items:center;} .sheet{border-radius:16px;} }
+  @keyframes rise{from{transform:translateY(20px); opacity:.6;} to{transform:none; opacity:1;}}
+  .sheet h2{font-size:16px; margin:0 0 14px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block; font-size:12px; color:var(--muted); margin-bottom:5px; font-weight:500;}
+  .field input, .field select{
+    width:100%; padding:10px 11px; border:1px solid var(--line-strong); border-radius:9px;
+    font-size:14px; font-family:inherit; background:#fff; color:var(--ink);
+  }
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .typepick{display:flex; gap:8px;}
+  .typepick button{
+    flex:1; padding:10px; border-radius:9px; border:1.5px solid var(--line-strong);
+    background:#fff; font-size:13px; font-weight:600; cursor:pointer; color:var(--muted);
+  }
+  .typepick button.sel-interne{background:var(--navy); color:#fff; border-color:var(--navy);}
+  .typepick button.sel-bpo{background:var(--neon); color:#fff; border-color:var(--neon);}
+  .sheet-actions{display:flex; gap:10px; margin-top:8px;}
+  .btn-primary{flex:1; background:var(--navy); color:#fff; border:none; border-radius:10px; padding:12px; font-size:14px; font-weight:600; cursor:pointer;}
+  .btn-ghost{border:1px solid var(--line-strong); background:#fff; border-radius:10px; padding:12px 16px; font-size:14px; cursor:pointer; color:var(--ink);}
+  .btn-danger{background:var(--red-soft); color:#a02525; border:none; border-radius:10px; padding:12px 16px; font-size:14px; font-weight:600; cursor:pointer;}
+  .detail-meta{font-size:13px; color:var(--muted); margin:-4px 0 16px; line-height:1.6;}
+  .detail-meta b{color:var(--ink); font-weight:600;}
+  .save-note{font-size:11px; color:var(--muted); text-align:center; margin-top:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="titlebar">
+    <div class="brand">
+      <span class="dot"></span>
+      <div style="min-width:0;">
+        <h1>Calendrier WFM</h1>
+        <span>Suivi des plannings · interne + BPO</span>
+      </div>
+    </div>
+    <button class="addbtn" id="addBtn">+ Session</button>
+  </div>
+  <div class="navbar">
+    <button class="nav-arrow" id="prevBtn" aria-label="Semaine précédente">‹</button>
+    <div class="weeklabel" id="weekLabel">—</div>
+    <button class="nav-arrow" id="nextBtn" aria-label="Semaine suivante">›</button>
+    <button class="today-btn" id="todayBtn">Aujourd'hui</button>
+  </div>
+  <div class="legend">
+    <span><i style="background:#191758"></i>Interne</span>
+    <span><i style="background:#5A52FF"></i>BPO</span>
+    <span><i style="background:#E24B4A"></i>Chevauchement</span>
+    <span style="margin-left:auto; opacity:.8;">Glisse ← → pour changer de semaine</span>
+  </div>
+</header>
+<div class="conflict-banner" id="banner"></div>
+
+<div class="calwrap">
+  <div class="slider" id="slider"></div>
+</div>
+
+<!-- Add / edit modal -->
+<div class="overlay" id="overlay">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script>
+(function(){
+  const DAY_START=8, DAY_END=20, HOURPX=52, COLS=6; // Mon..Sat
+  const DAYNAMES=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+  const MONTHS=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  const slider=document.getElementById('slider');
+  document.documentElement.style.setProperty('--cols',COLS);
+
+  let events=[];        // {id,name,type,group,date:'YYYY-MM-DD',start:'HH:MM',end:'HH:MM'}
+  let weekOffset=0;     // 0 = current week
+
+  // ---------- storage (localStorage, persists in the browser) ----------
+  const KEY='wfm_calendar_events';
+  let memStore=null; // in-memory fallback if localStorage is blocked
+  function persist(){
+    const data=JSON.stringify(events);
+    try{ localStorage.setItem(KEY,data); }catch(e){ memStore=data; }
+  }
+  function loadStore(){
+    try{
+      const raw=localStorage.getItem(KEY);
+      if(raw){ events=JSON.parse(raw); return true; }
+    }catch(e){
+      if(memStore){ try{ events=JSON.parse(memStore); return true; }catch(_){} }
+    }
+    return false;
+  }
+
+  // ---------- date helpers ----------
+  function mondayOf(offset){
+    const d=new Date(); d.setHours(0,0,0,0);
+    const wd=(d.getDay()+6)%7;          // 0=Mon
+    d.setDate(d.getDate()-wd+offset*7);
+    return d;
+  }
+  function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+  function toMin(hhmm){ const [h,m]=hhmm.split(':').map(Number); return h*60+m; }
+  function fmtRange(s,e){ return s+' – '+e; }
+
+  // ---------- overlap / lane packing ----------
+  function layoutDay(dayEvents){
+    const evs=dayEvents.slice().sort((a,b)=> toMin(a.start)-toMin(b.start) || toMin(a.end)-toMin(b.end));
+    // conflict flags (any pairwise time overlap)
+    evs.forEach(e=>e._conflict=false);
+    for(let i=0;i<evs.length;i++) for(let j=i+1;j<evs.length;j++){
+      if(toMin(evs[i].start)<toMin(evs[j].end) && toMin(evs[j].start)<toMin(evs[i].end)){
+        evs[i]._conflict=true; evs[j]._conflict=true;
+      }
+    }
+    // greedy lane assignment
+    const lanes=[]; // each lane = end minute of last event
+    evs.forEach(e=>{
+      let placed=false;
+      for(let l=0;l<lanes.length;l++){
+        if(toMin(e.start)>=lanes[l]){ e._lane=l; lanes[l]=toMin(e.end); placed=true; break; }
+      }
+      if(!placed){ e._lane=lanes.length; lanes.push(toMin(e.end)); }
+    });
+    const laneCount=Math.max(1,lanes.length);
+    evs.forEach(e=>e._lanes=laneCount);
+    return evs;
+  }
+
+  // ---------- render ----------
+  function render(){
+    const mon=mondayOf(weekOffset);
+    const sat=addDays(mon,COLS-1);
+    document.getElementById('weekLabel').textContent =
+      mon.getDate()+' '+MONTHS[mon.getMonth()]+' – '+sat.getDate()+' '+MONTHS[sat.getMonth()]+' '+sat.getFullYear();
+
+    slider.innerHTML='';
+    const pane=buildPane(mon);
+    slider.appendChild(pane);
+    slider.style.transition='none'; slider.style.transform='translateX(0)';
+
+    buildBanner(mon);
+  }
+
+  function buildPane(mon){
+    const todayIso=iso(new Date());
+    const pane=document.createElement('div'); pane.className='weekpane';
+
+    // day header
+    const head=document.createElement('div'); head.className='dayhead';
+    head.innerHTML='<div class="corner"></div>';
+    for(let i=0;i<COLS;i++){
+      const d=addDays(mon,i);
+      const isToday=iso(d)===todayIso;
+      const el=document.createElement('div');
+      el.className='dcol-head'+(isToday?' is-today':'');
+      el.innerHTML=DAYNAMES[i]+'<span class="dnum">'+d.getDate()+'</span>';
+      head.appendChild(el);
+    }
+    pane.appendChild(head);
+
+    // scrollable grid
+    const scroll=document.createElement('div'); scroll.className='gridscroll';
+    const grid=document.createElement('div'); grid.className='grid';
+
+    // time gutter
+    const gutter=document.createElement('div'); gutter.className='timegutter';
+    for(let h=DAY_START;h<DAY_END;h++){
+      const hl=document.createElement('div'); hl.className='hourlabel';
+      hl.innerHTML='<span>'+h+'h</span>';
+      gutter.appendChild(hl);
+    }
+    grid.appendChild(gutter);
+
+    // day columns
+    for(let i=0;i<COLS;i++){
+      const d=addDays(mon,i); const dIso=iso(d);
+      const col=document.createElement('div');
+      col.className='daycol'+(dIso===todayIso?' is-today':'');
+      col.dataset.date=dIso;
+      for(let h=DAY_START;h<DAY_END;h++){
+        const cell=document.createElement('div'); cell.className='hourcell';
+        col.appendChild(cell);
+      }
+      // click empty column to add on that day
+      col.addEventListener('click',(ev)=>{
+        if(ev.target.closest('.event')) return;
+        const rect=col.getBoundingClientRect();
+        const y=ev.clientY-rect.top + scroll.scrollTop;
+        let hour=DAY_START+Math.floor(y/HOURPX); hour=Math.max(DAY_START,Math.min(DAY_END-1,hour));
+        openForm(null,{date:dIso, start:String(hour).padStart(2,'0')+':00', end:String(Math.min(DAY_END,hour+1)).padStart(2,'0')+':00'});
+      });
+
+      // events for this day
+      const dayEvents=events.filter(e=>e.date===dIso);
+      const laid=layoutDay(dayEvents);
+      laid.forEach(e=>col.appendChild(buildEvent(e)));
+
+      if(dayEvents.length===0 && i===0){/* keep clean */}
+      grid.appendChild(col);
+    }
+    scroll.appendChild(grid);
+    pane.appendChild(scroll);
+    // auto-scroll to ~8h (top) but center around 9h
+    requestAnimationFrame(()=>{ scroll.scrollTop=Math.max(0,(9-DAY_START)*HOURPX-20); });
+    return pane;
+  }
+
+  function buildEvent(e){
+    const top=(toMin(e.start)-DAY_START*60)/60*HOURPX;
+    const height=Math.max(22,(toMin(e.end)-toMin(e.start))/60*HOURPX-2);
+    const w=100/e._lanes, left=e._lane*w;
+    const el=document.createElement('div');
+    el.className='event '+(e.type==='BPO'?'bpo':'interne')+(e._conflict?' conflict':'');
+    el.style.top=top+'px'; el.style.height=height+'px';
+    el.style.left='calc('+left+'% + 2px)'; el.style.width='calc('+w+'% - 4px)';
+    el.innerHTML=(e._conflict?'<span class="warn">⚠</span>':'')+
+      '<div class="etime">'+e.start+'</div><div class="ename">'+escapeHtml(e.name)+'</div>';
+    el.addEventListener('click',(ev)=>{ ev.stopPropagation(); openDetail(e); });
+    return el;
+  }
+
+  function buildBanner(mon){
+    const banner=document.getElementById('banner');
+    const conflicts=[];
+    for(let i=0;i<COLS;i++){
+      const dIso=iso(addDays(mon,i));
+      const laid=layoutDay(events.filter(e=>e.date===dIso));
+      const seen=new Set();
+      laid.forEach(e=>{ if(e._conflict && !seen.has(e.id)){ seen.add(e.id);} });
+      const conf=laid.filter(e=>e._conflict);
+      if(conf.length>=2){
+        conflicts.push(DAYNAMES[i]+' '+addDays(mon,i).getDate()+' : '+conf.map(c=>c.name+' ('+c.start+')').join(' ↔ '));
+      }
+    }
+    if(conflicts.length){
+      banner.classList.add('show');
+      banner.innerHTML='<span>⚠</span><div><b>Chevauchement détecté</b><br>'+conflicts.map(escapeHtml).join('<br>')+'</div>';
+    }else{ banner.classList.remove('show'); banner.innerHTML=''; }
+  }
+
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // ---------- week navigation with slide ----------
+  function goWeek(dir){ // dir -1 prev, +1 next
+    const mon=mondayOf(weekOffset+dir);
+    const incoming=buildPane(mon);
+    incoming.style.position='absolute'; incoming.style.top=0; incoming.style.left=0; incoming.style.width='100%'; incoming.style.height='100%';
+    incoming.style.transform='translateX('+(dir>0?'100%':'-100%')+')';
+    slider.appendChild(incoming);
+    // force reflow
+    void incoming.offsetWidth;
+    slider.style.transition='transform .28s cubic-bezier(.22,.61,.36,1)';
+    slider.style.transform='translateX('+(dir>0?'-100%':'100%')+')';
+    setTimeout(()=>{ weekOffset+=dir; render(); },290);
+  }
+
+  document.getElementById('prevBtn').onclick=()=>goWeek(-1);
+  document.getElementById('nextBtn').onclick=()=>goWeek(1);
+  document.getElementById('todayBtn').onclick=()=>{ weekOffset=0; render(); };
+  window.addEventListener('keydown',e=>{ if(e.key==='ArrowLeft')goWeek(-1); if(e.key==='ArrowRight')goWeek(1); });
+
+  // swipe / drag
+  let dragX=null, dragging=false;
+  const wrap=document.querySelector('.calwrap');
+  wrap.addEventListener('pointerdown',e=>{ dragX=e.clientX; dragging=true; });
+  wrap.addEventListener('pointermove',e=>{
+    if(!dragging||dragX===null) return;
+    const dx=e.clientX-dragX;
+    if(Math.abs(dx)>4){ slider.style.transition='none'; slider.style.transform='translateX('+dx+'px)'; }
+  });
+  function endDrag(e){
+    if(!dragging||dragX===null){ dragging=false; return; }
+    const dx=(e.clientX||dragX)-dragX; dragging=false; dragX=null;
+    if(dx<=-60) goWeek(1);
+    else if(dx>=60) goWeek(-1);
+    else { slider.style.transition='transform .2s ease'; slider.style.transform='translateX(0)'; }
+  }
+  wrap.addEventListener('pointerup',endDrag);
+  wrap.addEventListener('pointercancel',endDrag);
+  wrap.addEventListener('pointerleave',e=>{ if(dragging) endDrag(e); });
+
+  // ---------- modal: add / edit ----------
+  const overlay=document.getElementById('overlay'), sheet=document.getElementById('sheet');
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) closeModal(); });
+  function closeModal(){ overlay.classList.remove('show'); }
+
+  function openForm(existing, prefill){
+    const e=existing||{name:'',type:'Interne',group:'',date:prefill?.date||iso(mondayOf(weekOffset)),start:prefill?.start||'09:00',end:prefill?.end||'10:00'};
+    sheet.innerHTML=`
+      <h2>${existing?'Modifier la session':'Nouvelle session'}</h2>
+      <div class="field"><label>Nom de la session</label>
+        <input id="f_name" placeholder="E-learning – Onboarding produit" value="${escapeHtml(e.name)}"></div>
+      <div class="field"><label>Type</label>
+        <div class="typepick" id="f_type">
+          <button data-t="Interne" class="${e.type==='Interne'?'sel-interne':''}">Interne</button>
+          <button data-t="BPO" class="${e.type==='BPO'?'sel-bpo':''}">BPO</button>
+        </div></div>
+      <div class="field"><label>Groupe / agrégat</label>
+        <input id="f_group" placeholder="Mover, Switcher, Outsourcia…" value="${escapeHtml(e.group||'')}"></div>
+      <div class="field"><label>Date</label>
+        <input id="f_date" type="date" value="${e.date}"></div>
+      <div class="row2">
+        <div class="field"><label>Début</label><input id="f_start" type="time" value="${e.start}"></div>
+        <div class="field"><label>Fin</label><input id="f_end" type="time" value="${e.end}"></div>
+      </div>
+      <div class="sheet-actions">
+        ${existing?'<button class="btn-danger" id="f_del">Supprimer</button>':''}
+        <button class="btn-ghost" id="f_cancel">Annuler</button>
+        <button class="btn-primary" id="f_save">${existing?'Enregistrer':'Ajouter'}</button>
+      </div>`;
+    let type=e.type;
+    sheet.querySelectorAll('#f_type button').forEach(b=>b.onclick=()=>{
+      type=b.dataset.t;
+      sheet.querySelectorAll('#f_type button').forEach(x=>x.className='');
+      b.className=type==='Interne'?'sel-interne':'sel-bpo';
+    });
+    sheet.querySelector('#f_cancel').onclick=closeModal;
+    if(existing) sheet.querySelector('#f_del').onclick=async()=>{ events=events.filter(x=>x.id!==existing.id); persist(); closeModal(); render(); };
+    sheet.querySelector('#f_save').onclick=async()=>{
+      const name=sheet.querySelector('#f_name').value.trim()||'Session sans nom';
+      const rec={
+        id: existing?existing.id : 'e'+Date.now()+Math.random().toString(36).slice(2,6),
+        name, type,
+        group: sheet.querySelector('#f_group').value.trim(),
+        date: sheet.querySelector('#f_date').value,
+        start: sheet.querySelector('#f_start').value,
+        end: sheet.querySelector('#f_end').value
+      };
+      if(toMin(rec.end)<=toMin(rec.start)) rec.end=String(Math.min(DAY_END,toMin(rec.start)/60+1)).padStart(2,'0')+':00';
+      if(existing) events=events.map(x=>x.id===existing.id?rec:x); else events.push(rec);
+      persist();
+      weekOffset=weekOffsetForDate(rec.date); // jump to the week of the saved event
+      closeModal(); render();
+    };
+    overlay.classList.add('show');
+    setTimeout(()=>sheet.querySelector('#f_name').focus(),50);
+  }
+
+  function weekOffsetForDate(dateStr){
+    const target=new Date(dateStr+'T00:00:00'); target.setHours(0,0,0,0);
+    const twd=(target.getDay()+6)%7; target.setDate(target.getDate()-twd);
+    const cur=mondayOf(0);
+    return Math.round((target-cur)/(7*864e5));
+  }
+
+  function openDetail(e){
+    sheet.innerHTML=`
+      <h2>${escapeHtml(e.name)}</h2>
+      <div class="detail-meta">
+        <b>${e.type}</b>${e.group?' · '+escapeHtml(e.group):''}<br>
+        ${new Date(e.date+'T00:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}<br>
+        ${fmtRange(e.start,e.end)}
+      </div>
+      <div class="sheet-actions">
+        <button class="btn-danger" id="d_del">Supprimer</button>
+        <button class="btn-ghost" id="d_edit">Modifier</button>
+        <button class="btn-primary" id="d_close">Fermer</button>
+      </div>`;
+    sheet.querySelector('#d_close').onclick=closeModal;
+    sheet.querySelector('#d_edit').onclick=()=>openForm(e);
+    sheet.querySelector('#d_del').onclick=async()=>{ events=events.filter(x=>x.id!==e.id); persist(); closeModal(); render(); };
+    overlay.classList.add('show');
+  }
+  document.getElementById('addBtn').onclick=()=>openForm(null,{date:iso(mondayOf(weekOffset))});
+
+  // ---------- seed sample data on first run ----------
+  function seed(){
+    const mon=mondayOf(0);
+    const d=(i)=>iso(addDays(mon,i));
+    events=[
+      {id:'s1',name:'E-learning – Onboarding produit',type:'Interne',group:'Mover',date:d(0),start:'09:00',end:'10:30'},
+      {id:'s2',name:'Quiz conformité',type:'Interne',group:'Switcher',date:d(1),start:'11:00',end:'12:00'},
+      {id:'s3',name:'Training Outsourcia',type:'BPO',group:'Outsourcia',date:d(2),start:'14:00',end:'16:00'},
+      {id:'s4',name:'Expert eval',type:'Interne',group:'Mover',date:d(2),start:'15:00',end:'16:00'}, // overlaps s3 → conflict
+      {id:'s5',name:'E-learning – Énergie niv.2',type:'BPO',group:'Outsourcia',date:d(4),start:'10:00',end:'12:00'}
+    ];
+  }
+
+  // ---------- init ----------
+  (async function init(){
+    const had=loadStore();
+    if(!had || !events.length){ seed(); persist(); }
+    render();
+  })();
+})();
+</script>
+</body>
+</html>
